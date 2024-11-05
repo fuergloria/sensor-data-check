@@ -1,0 +1,224 @@
+{% extends "layout.html" %}
+{% block title %}
+Humidity and Temperature Detail
+{% endblock %}
+{% block main %}
+
+<div class="d-flex flex-column align-items-center mt-3">
+
+  <!--select which data-->
+<form method="POST" action="/chart" >
+  <select class="form-select mb-3" aria-label="Default select example" name="datatype">
+    <option value="rht_humidity">Humidity (%)</option>
+    <option value="rht_temperature">Temperature (°C)</option>
+    <option value="gas_eco2">CO2 concentration (ppm)</option>
+    <option value="gas_tvoc">Total volatile organic compunds (ppb)</option>
+    <option value="light_lux">Light intensity (lux)</option>
+    <option value="light_uvi">UV index</option>
+  </select>
+  </form>
+
+  <!-- Time period selector buttons -->
+  <div class="mb-3">
+    {% for period in periods %}
+    <a href="{{ url_for('chart', period=period, date=current_date.strftime('%Y-%m-%d')) }}"
+      class="btn btn-{{ 'primary' if period == selected_period else 'secondary' }}">
+      {{ period|capitalize }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Navigation controls -->
+  <div class="mb-3">
+    <button id="prevPeriod" class="btn btn-secondary">&larr; Previous</button>
+    <span id="currentPeriod" class="mx-3">
+        {% if selected_period == 'day' %}
+            {{ current_date.strftime('%B %d, %Y') }}
+        {% elif selected_period == 'week' %}
+          {{ start_date.strftime('%B %d') }} - {{ end_date.strftime('%B %d, %Y') }}
+        {% elif selected_period == 'month' %}
+            {{ current_date.strftime('%B %Y') }}
+        {% else %}
+            {{ current_date.strftime('%Y') }}
+        {% endif %}
+    </span>
+    <button id="nextPeriod" class="btn btn-secondary">Next &rarr;</button>
+  </div>
+
+</div>
+
+
+<div class="w-90">
+ <!-- Statistics section -->
+ <div class="row mb-3 mx-5">
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Average {{name}}</h5>
+        <p id="avgHumidity" class="card-text">
+          {% if avg is not none %}
+            {{avg}} {{unit}}
+          {% else %}
+          -
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Min {{name}}</h5>
+        <p id="minHumidity" class="card-text">
+        {% if mini is not none %}
+          {{mini}} {{unit}}
+        {% else %}
+        -
+        {% endif %}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Max {{name}}</h5>
+        <p id="maxHumidity" class="card-text">
+        {% if maxi is not none %}
+          {{maxi}} {{unit}}
+        {% else %}
+        -
+        {% endif %}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Data Points</h5>
+        <p id="dataPoints" class="card-text">{{num}}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="w-100 p-0">
+  <div class="w-100 h-100" style="position: relative">
+    <canvas id="rhtChart" width="400" height="200">
+    </canvas>
+  </div>
+</div>
+
+</div>
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctx = document.getElementById('rhtChart');
+
+  {% block canvas %} {% endblock %}
+  const someData = {{ sensor_data | map(attribute = datatype) | list | tojson }};
+  const name = "{{name}} ({{unit}})";
+
+  //timestamp,rht_humidity,rht_temperature,gas_eco2,gas_tvoc,light_lux,light_uvi
+
+
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: name,
+        data: someData,
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1,
+        spanGaps: true
+      }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true
+    }
+  });
+
+  // Navigation JavaScript
+    const prevButton = document.getElementById('prevPeriod');
+    const nextButton = document.getElementById('nextPeriod');
+    const currentPeriod = '{{ selected_period }}';
+
+    function formatDate(date){
+      // Format date as YYYY-MM-DD
+      return date.toISOString().split('T')[0];
+    };
+
+    function navigatePeriod(direction) {
+    try {
+    // Parse the current date string
+    let currentDate = new Date('{{ current_date.strftime('%Y-%m-%d') }}');
+
+    // Clone the date object to avoid modifying the original
+    let newDate = new Date(currentDate.getTime());
+
+    switch(currentPeriod) {
+      case 'day':
+        newDate.setDate(newDate.getDate() + direction);
+        break;
+      case 'week':
+        newDate.setDate(newDate.getDate() + (direction * 7));
+        break;
+      case 'month':
+        newDate.setMonth(newDate.getMonth() + direction);
+        break;
+      case 'year':
+        newDate.setFullYear(newDate.getFullYear() + direction);
+        break;
+    }
+
+    console.log('New Date after update:', newDate);
+
+    // Format the new date
+    const formattedDate = newDate.toISOString().split('T')[0];
+
+    // Encode the date string for URL safety
+    const encodedDate = encodeURIComponent(formattedDate);
+
+    // Create a new URL
+    const newUrl = `/chart/${currentPeriod}/${encodedDate}`;
+    window.location.href = newUrl;
+  } catch (error) {
+    console.error('Error navigating period:', error);
+  }
+};
+
+    prevButton.addEventListener('click', () => navigatePeriod(-1));
+    nextButton.addEventListener('click', () => navigatePeriod(1));
+
+    document.querySelector('.form-select').addEventListener('change', function(){
+
+      const period = "{{ selected_period }}";
+      const date = "{{ current_date.strftime('%Y-%m-%d') }}";
+
+      this.form.action = `/chart/${period}/${date}`;
+      this.form.submit();
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+    var selectElement = document.querySelector('.form-select');
+    var datatype = '{{ datatype }}';
+
+    // Set the selected option based on the passed variable
+    Array.from(selectElement.options).forEach(function(option) {
+        if (option.value === datatype) {
+            option.selected = true;
+        }
+    });
+});
+
+</script>
+
+
+{% endblock %}

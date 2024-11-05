@@ -1,0 +1,10 @@
+{% extends "chart.html" %}
+
+{% block canvas %}
+
+const rawLabels = {{ sensor_data | map(attribute='timestamp') | list | tojson }};
+const labels = rawLabels.map(timestamp => {
+  const [year, month, day] = timestamp.split('T')[0].split('-');
+  return `${day}.${month}`;});
+
+{% endblock %}

@@ -1,0 +1,261 @@
+{% extends "layout.html" %}
+{% block title %}
+  Humidity and Temperature Detail
+{% endblock %}
+{% block main %}
+<h1>Overview</h1>
+
+<!-- Time period selector buttons -->
+<div class="mb-3">
+  <button id="day" class="btn btn-primary">Day</button>
+  <button id="week" class="btn btn-secondary">Week</button>
+  <button id="month" class="btn btn-secondary">Month</button>
+  <button id="year" class="btn btn-secondary">Year</button>
+</div>
+
+<!-- Navigation controls -->
+<div class="mb-3">
+  <button id="prevPeriod" class="btn btn-secondary">&larr; Previous</button>
+  <span id="currentPeriod" class="mx-3">Current Period</span>
+  <button id="nextPeriod" class="btn btn-secondary">Next &rarr;</button>
+</div>
+
+<!-- Statistics section -->
+<div class="row mb-3">
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Average Humidity</h5>
+        <p id="avgHumidity" class="card-text">-</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Min Humidity</h5>
+        <p id="minHumidity" class="card-text">-</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Max Humidity</h5>
+        <p id="maxHumidity" class="card-text">-</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title">Data Points</h5>
+        <p id="dataPoints" class="card-text">-</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<canvas id="rhtChart" width="400" height="200"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Store the original data
+const originalData = {{ sensor_data|tojson }};
+let chart;
+let currentPeriod = 'day';
+let currentDate = new Date();
+
+function initChart(data) {
+    const ctx = document.getElementById('rhtChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Humidity (%)',
+                data: data.humidity,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            },
+            {
+                label: 'Temperature (°C)',
+                data: data.temperature,
+                borderColor:'rgb(255, 99, 132)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: getXAxisTitle(currentPeriod)
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            if (currentPeriod === 'day') {
+                                return index % 6 === 0 ? this.getLabelForValue(value) : '';
+                            }
+                            return this.getLabelForValue(value);
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function updateChart(data) {
+    chart.data.labels = data.labels;
+    chart.data.datasets[0].data = data.humidity;
+    chart.data.datasets[1].data = data.temperature;
+    chart.options.scales.x.title.text = getXAxisTitle(currentPeriod);
+    chart.update();
+}
+
+function updateStatistics(data) {
+    const validHumidityValues = data.humidity.filter(v => v !== null);
+    const validTemperatureValues = data.temperature.filter(v => v !== null);
+
+    const avgHumidity = validHumidityValues.reduce((a, b) => a + b, 0) / validHumidityValues.length;
+    const minHumidity = Math.min(...validHumidityValues);
+    const maxHumidity = Math.max(...validHumidityValues);
+
+    document.getElementById('avgHumidity').textContent = avgHumidity.toFixed(2) + '%';
+    document.getElementById('minHumidity').textContent = minHumidity.toFixed(2) + '%';
+    document.getElementById('maxHumidity').textContent = maxHumidity.toFixed(2) + '%';
+    document.getElementById('dataPoints').textContent = validHumidityValues.length;
+}
+
+function filterDataByPeriod(period, date) {
+    const startDate = new Date(date);
+    const endDate = new Date(date);
+
+    switch(period) {
+        case 'day':
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
+            break;
+        case 'week':
+            startDate.setDate(date.getDate() - date.getDay());
+            endDate.setDate(startDate.getDate() + 6);
+            break;
+        case 'month':
+            startDate.setDate(1);
+            endDate.setMonth(startDate.getMonth() + 1);
+            endDate.setDate(0);
+            break;
+        case 'year':
+            startDate.setMonth(0, 1);
+            endDate.setMonth(11, 31);
+            break;
+    }
+
+    return originalData.filter(d => {
+        const dataDate = new Date(d.timestamp);
+        return dataDate >= startDate && dataDate <= endDate;
+    });
+}
+
+function aggregateData(data, period) {
+    let aggregated = [];
+    const timeSlots = {
+        'day': Array.from({length: 24}, (_, i) => `${i.toString().padStart(2, '0')}:00`),
+        'week': ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        'month': ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
+        'year': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    };
+
+    // Initialize aggregated array with all time slots
+    timeSlots[period].forEach(slot => {
+        aggregated.push({
+            label: slot,
+            humidity: 0,
+            temperature: 0,
+            count: 0
+        });
+    });
+
+    data.forEach(d => {
+        const date = new Date(d.timestamp);
+        let index;
+        switch(period) {
+            case 'day':
+                index = date.getHours();
+                break;
+            case 'week':
+                index = date.getDay();
+                break;
+            case 'month':
+                index = Math.min(Math.floor((date.getDate() - 1) / 7), 4); // Cap at 4 for "Week 5"
+                break;
+            case 'year':
+                index = date.getMonth();
+                break;
+        }
+        aggregated[index].humidity += d.rht_humidity;
+        aggregated[index].temperature += d.rht_temperature;
+        aggregated[index].count++;
+    });
+
+    return {
+        labels: aggregated.map(a => a.label),
+        humidity: aggregated.map(a => a.count > 0 ? a.humidity / a.count : null),
+        temperature: aggregated.map(a => a.count > 0 ? a.temperature / a.count : null)
+    };
+}
+
+function getXAxisTitle(period) {
+    switch(period) {
+        case 'day': return 'Time';
+        case 'week': return 'Day of Week';
+        case 'month': return 'Week of Month';
+        case 'year': return 'Month';
+        default: return '';
+    }
+}
+
+function updatePeriod() {
+    const filteredData = filterDataByPeriod(currentPeriod, currentDate);
+    const aggregatedData = aggregateData(filteredData, currentPeriod);
+    updateChart(aggregatedData);
+    updateStatistics(aggregatedData);
+    updateCurrentPeriodDisplay();
+}
+
+function updateCurrentPeriodDisplay() {
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    let displayText;
+    switch(currentPeriod) {
+        case 'day':
+            displayText = currentDate.toLocaleDateString(undefined, options);
+            break;
+        case 'week':
+            const weekStart = new Date(currentDate);
+            weekStart.setDate(currentDate.getDate() - currentDate.getDay());
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            displayText = `${weekStart.toLocaleDateString(undefined, options)} - ${weekEnd.toLocaleDateString(undefined, options)}`;
+            break;
+        case 'month':
+            displayText = currentDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+            break;
+        case 'year':
+            displayText = currentDate.getFullYear().toString();
+            break;
+    }
+    document.getElementById('currentPeriod').textContent = displayText;
+}
+
+// ... (event listeners remain the same)
+
+// Initialize the chart with all data for the current day
+initChart(aggregateData(filterDataByPeriod('day', new Date()), 'day'));
+updatePeriod();
+</script>
+{% endblock %}

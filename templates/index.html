@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+
+{% block title %}
+  datacheck
+{% endblock %}
+
+{% block main %}
+<div class="container-fluid text-center mt-3">
+  <div class="row">
+    <h2>
+      You've wondered how the air quality in your home is?
+    </h2>
+  </div>
+  <div class="row justify-content-center">
+    <div class="col-md-3 mb-3">
+      <a class="btn btn-primary" href="/chart" id="btn-chart">
+        Check now!
+      </a>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+
+    <div class="col">
+      <h2>
+        Interested in a specific time frame and need all the data?
+      </h2>
+      <form method="POST" action="/table">
+
+        <div class="row justify-content-center mb-3">
+
+          <div class="col-md-3">
+            <label for="inputDataTypes" class="form-label fw-bold">
+              Which data are you interested in?
+            </label>
+
+            <div class="form-check">
+              <input name="humidity" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                Humidity (%)
+              </label>
+            </div>
+            <div class="form-check">
+              <input name="temperature" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                Temperature (°C)
+              </label>
+            </div>
+            <div class="form-check">
+              <input name="eco2" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                CO2 concentration (ppm)
+              </label>
+            </div>
+            <div class="form-check">
+              <input name="tvoc" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                Total volatile organic compunds (ppb)
+              </label>
+            </div>
+            <div class="form-check">
+              <input name="lux" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                Light intensity (lux)
+              </label>
+            </div>
+            <div class="form-check">
+              <input name="uvi" class="form-check-input" type="checkbox" value="">
+              <label class="form-check-label">
+                UV index
+              </label>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="row mb-3 justify-content-center">
+          <div class="col-md-2 form-group fw-bold">
+            <label for="timeframe" class="mb-2">Select Timeframe:</label>
+            <select name="timeframe" id="timeframe" class="form-control">
+                <option value="last_hour">Last Hour</option>
+                <option value="last_day">Last 24 Hours</option>
+                <option value="last_week">Last Week</option>
+                <option value="last_month">Last Month</option>
+                <option value="custom">Custom Range</option>
+            </select>
+        </div>
+
+        <!-- Custom date range (initially hidden, show with JavaScript when custom is selected) -->
+        <div class="row justify-content-center mt-3 g-3" id="custom-dates" style="display: none;">
+
+            <div class="form-group col-md-2">
+                <label for="start_date">Start Date:</label>
+                <input type="date" name="start_date" id="start_date" class="form-control">
+            </div>
+            <div class="form-group col-md-2">
+                <label for="end_date">End Date:</label>
+                <input type="date" name="end_date" id="end_date" class="form-control">
+            </div>
+
+        </div>
+
+        </div>
+
+        <div class="col">
+          <button class="btn btn-primary" type="submit">
+            Generate Table
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+</div>
+
+
+<script>
+  document.getElementById('timeframe').addEventListener('change', function() {
+      const customDates = document.getElementById('custom-dates');
+
+      if (this.value === 'custom') {
+        customDates.classList.add('d-flex');
+        customDates.style.display = 'block';
+    } else {
+        customDates.classList.remove('d-flex');
+        customDates.style.display = 'none';
+    }
+
+  });
+  </script>
+{% endblock %}
